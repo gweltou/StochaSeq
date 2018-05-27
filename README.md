@@ -1,0 +1,2 @@
+# StochaSeq
+Stochastic midi sequencer
