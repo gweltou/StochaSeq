@@ -40,11 +40,13 @@ phrygiandom = [1, 3, 1, 2, 1, 2, 2]
 
 def create_scale(tonic, pattern, octave=1):
     """
-        Create an octave-repeating scale from a tonic note and a pattern of intervals
+        Create an octave-repeating scale from a tonic note
+        and a pattern of intervals
         
         Args:
             tonic: root note (midi note number)
-            pattern: pattern of intervals (list of numbers representing intervals in semitones)
+            pattern: pattern of intervals (list of numbers representing
+            intervals in semitones)
             octave: span of scale (in octaves)
         
         Returns:
@@ -200,7 +202,7 @@ class Basic(StochaPlayer):
     def f2(self, r):
         """Play two different random notes"""
         note = random.choice(self.scale)
-        interval = random.choice([4, 5, 6, 12])
+        interval = random.choice([4, 5, 6, 12]) ### TODO: this is bad
         self.play_notes([note, note+interval])
     
     def f3(self, r):
@@ -250,6 +252,32 @@ class Pad(Basic):
         self.update_weights([[6, 2, 2, 4],
             [1, 2, 0, 10, 0, 6, 0, 6, 0, 4],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
+
+
+class Monotone(StochaPlayer):
+    def __init__(self, midiout, channel=0, timesig=(4,4)):
+        super(Monotone, self).__init__(midiout, channel, timesig)
+        self.pitch = random.choice(self.scale)
+        self.durations = map(lambda x: x*4, self.durations)
+        self.update_weights([[2, 10, 2, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 2, 0, 10, 0, 4, 0, 1, 0, 1]])
+    
+    def f1(self, r):
+        """Play on beat"""
+        self.play_notes([self.pitch])
+        self.wait_nticks = TICKS_PER_BEAT - 1
+    
+    def f2(self, r):
+        """Play on half beat"""
+        self.play_notes([self.pitch])
+        self.wait_nticks = TICKS_PER_BEAT // 2 - 1
+   
+    def f3(self, r):
+        """Change pitch"""
+        i = self.get_weighted_index(r, self.scale)
+        self.pitch = self.scale[i]
+        f1(r)
 
 
 ################################################################################
