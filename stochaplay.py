@@ -3,11 +3,17 @@
 
 
 from __future__ import division, print_function
+import sys
 import random
 import time
 import heapq
 import mido
-import Tkinter as tk
+
+# Backward compatibility with python 2.7
+if sys.version_info[0] < 3:
+    import tKinter as tk
+else:
+    import tkinter as tk
 
 
 TICKS_PER_BEAT = 4
@@ -83,6 +89,7 @@ class StochaPlayer(object):
         self.timesig = timesig
         self.wait_nticks = 0
         self.played_notes = []
+        self.scale = create_scale(C2, major)  # Set au default music scale
         self.weigths_desc = ["function", "note/chord duration", "silence duration"]
         self.update_weights([[5, 2, 2, 1],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
@@ -125,8 +132,9 @@ class StochaPlayer(object):
     def set_volume(self, vol):
         self.volume = vol
     
-    def play_notes(self, notes):
-        """
+    def play_notes_random_dur(self, notes):
+        """ Play notes with a random duration
+            
             Note duration (dur):
                 duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
                 sixteenth note (semiquaver)	1
@@ -142,7 +150,27 @@ class StochaPlayer(object):
                 print(note, end=' ')
             self.midi.send(mido.Message('note_on', channel=self.channel, note=note, velocity=vol))
         i = self.get_weighted_index(random.random(), self.weights[1])
-        self.wait_nticks = self.durations[i] - 1
+        self.wait_nticks = self.durations[i] - 1  # skip a tick
+        self.played_notes = notes
+    
+    def play_notes(self, notes, dur=4):
+        """ Play notes with a given duration
+            
+            Note duration (dur):
+                duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
+                sixteenth note (semiquaver)	1
+                eighth note (quaver)		2
+                quarter note (crotchet)		4
+                half note (minim)		8
+                whole note (semibreve)		16
+                double note (breve)		32
+        """
+        vol = int(self.volume * random.gauss(64, 16))
+        for note in notes:
+            if __debug__:
+                print(note, end=' ')
+            self.midi.send(mido.Message('note_on', channel=self.channel, note=note, velocity=vol))
+        self.wait_nticks = dur - 1  # skip a tick
         self.played_notes = notes
     
     def tick(self, r1, r2):
@@ -174,17 +202,17 @@ class Chaotic(StochaPlayer):
     def f1(self, r):
         """Play a random note"""
         pitch = random.choice(self.scale)
-        self.play_notes([pitch])
+        self.play_notes_random_dur([pitch])
     
     def f2(self, r):
         """Play two different random notes"""
         notes = random.sample(self.scale, 2)
-        self.play_notes(notes)
+        self.play_notes_random_dur(notes)
     
     def f3(self, r):
         """Play three different random notes"""
         notes = random.sample(self.scale, 3)
-        self.play_notes(notes)
+        self.play_notes_random_dur(notes)
 
 
 class Basic(StochaPlayer):
@@ -197,13 +225,13 @@ class Basic(StochaPlayer):
     def f1(self, r):
         """Play a random note"""
         pitch = random.choice(self.scale)
-        self.play_notes([pitch])
+        self.play_notes_random_dur([pitch])
     
     def f2(self, r):
         """Play two different random notes"""
         note = random.choice(self.scale)
         interval = random.choice([4, 5, 6, 12]) ### TODO: this is bad
-        self.play_notes([note, note+interval])
+        self.play_notes_random_dur([note, note+interval])
     
     def f3(self, r):
         """Play a triad"""
@@ -211,7 +239,7 @@ class Basic(StochaPlayer):
         root = random.choice(self.scale)
         chord_name, chord = self.chords[int(r*len(self.chords))]
         notes = [root+interval for interval in chord] 
-        self.play_notes(notes)
+        self.play_notes_random_dur(notes)
         print(chord_name, end=' ')
 
 
@@ -227,17 +255,17 @@ class Soloist(StochaPlayer):
     def f1(self, r):
         """Play a new random note"""
         self.index = int(r*len(self.scale))
-        self.play_notes([self.scale[self.index]])
+        self.play_notes_random_dur([self.scale[self.index]])
     
     def f2(self, r):
         """Play next note on scale (1 step)"""
         self.index = (self.index + self.direction) % len(self.scale)
-        self.play_notes([self.scale[self.index]])
+        self.play_notes_random_dur([self.scale[self.index]])
     
     def f3(self, r):
         """Play next note on scale (2 steps)"""
         self.index = (self.index + 2*self.direction) % len(self.scale)
-        self.play_notes([self.scale[self.index]])
+        self.play_notes_random_dur([self.scale[self.index]])
     
     def f4(self, r):
         """Change direction (up/down)"""
@@ -248,7 +276,7 @@ class Soloist(StochaPlayer):
 class Pad(Basic):
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Pad, self).__init__(midiout, channel, timesig)
-        self.durations = map(lambda x: x*4, self.durations)
+        self.durations = list(map(lambda x: x*4, self.durations))
         self.update_weights([[6, 2, 2, 4],
             [1, 2, 0, 10, 0, 6, 0, 6, 0, 4],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
@@ -258,26 +286,24 @@ class Monotone(StochaPlayer):
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Monotone, self).__init__(midiout, channel, timesig)
         self.pitch = random.choice(self.scale)
-        self.durations = map(lambda x: x*4, self.durations)
-        self.update_weights([[2, 10, 2, 1],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        self.durations = list(map(lambda x: x*4, self.durations))
+        self.update_weights([[1, 10, 2, 1],
+            [],
             [1, 2, 0, 10, 0, 4, 0, 1, 0, 1]])
     
     def f1(self, r):
         """Play on beat"""
-        self.play_notes([self.pitch])
-        self.wait_nticks = TICKS_PER_BEAT - 1
+        self.play_notes([self.pitch], TICKS_PER_BEAT)
     
     def f2(self, r):
         """Play on half beat"""
-        self.play_notes([self.pitch])
-        self.wait_nticks = TICKS_PER_BEAT // 2 - 1
+        self.play_notes([self.pitch], TICKS_PER_BEAT // 2)
    
     def f3(self, r):
         """Change pitch"""
         i = self.get_weighted_index(r, self.scale)
         self.pitch = self.scale[i]
-        f1(r)
+        self.f1(r)
 
 
 ################################################################################
@@ -310,7 +336,7 @@ class devicePickerGui:
 
 
 if __name__ == '__main__':
-    mido.set_backend('mido.backends.portmidi')
+    #mido.set_backend('mido.backends.portmidi')
     if __debug__:
         print(mido.get_output_names())
         
@@ -318,9 +344,7 @@ if __name__ == '__main__':
     top = tk.Tk()
     devicePickerGui(top)
     top.mainloop()
-    #midiout = mido.open_output('amSynth MIDI IN')
-    #midiout = mido.open_output('Synth input port (Qsynth1:0)')
-    s = Pad(midiout, channel=0)
+    s = Monotone(midiout, channel=0)
     s.program_change(92)
     s2 = Soloist(midiout, channel=1)
     s2.program_change(84)
