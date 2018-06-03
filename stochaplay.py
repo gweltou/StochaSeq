@@ -276,19 +276,34 @@ class Monotone(StochaPlayer):
         self.update_weights([[1, 10, 2, 1],
             [],
             [1, 2, 0, 10, 0, 4, 0, 1, 0, 1]])
+        self.halfbeat = False
+    
+    def tick(self, r1, r2):
+        if self.wait_nticks > 0:
+            self.wait_nticks -= 1
+            return
+        if self.played_notes:
+            for note in self.played_notes:
+                self.midi.send(mido.Message('note_off', channel=self.channel, note=note))
+        
+        if self.halfbeat:
+            self.f2(r2)
+        else:
+            i = self.get_weighted_index(r1, self.weights[0])
+            eval("self.f{}(r2)".format(i))
     
     def f1(self, r):
         """Play on beat"""
-        self.play_notes([self.pitch], dur=TICKS_PER_BEAT)
+        self.play_notes([self.pitch], TICKS_PER_BEAT)
     
     def f2(self, r):
         """Play on half beat"""
-        self.play_notes([self.pitch], dur=TICKS_PER_BEAT//2)
+        self.play_notes([self.pitch], TICKS_PER_BEAT//2)
+        self.halfbeat = not self.halfbeat
    
     def f3(self, r):
         """Change pitch"""
-        i = self.get_weighted_index(r, self.scale)
-        self.pitch = self.scale[i]
+        self.pitch = self.scale[int(r*len(self.scale))]
         self.f1(r)
 
 
@@ -322,7 +337,7 @@ class devicePickerGui:
 
 
 if __name__ == '__main__':
-    mido.set_backend('mido.backends.portmidi')
+    #mido.set_backend('mido.backends.portmidi')
     if __debug__:
         print(mido.get_output_names())
         
@@ -331,12 +346,17 @@ if __name__ == '__main__':
     devicePickerGui(top)
     top.mainloop()
     s = Monotone(midiout, channel=0)
-    s.program_change(92)
+    #s.program_change(92)
+    s.set_volume(0.5)
+    s.set_scale(create_scale(C2, minor, 1))
+    
     s2 = Soloist(midiout, channel=1)
-    s2.program_change(84)
     s2.set_volume(0.5)
-    s.set_scale(create_scale(C1, gypsy, 2))
-    s2.set_scale(create_scale(C3, major, 2))
+    #s2.program_change(84)
+    s2.set_scale(create_scale(C2, minor, 2))
+    
+    s3 = Pad(midiout, channel=3)
+    s3.set_scale(create_scale(C2, minor, 1))
     
     tempo = 120
     time_step = 60/tempo
@@ -349,6 +369,7 @@ if __name__ == '__main__':
         r2 = random.random()
         s.tick(r1, r2)
         s2.tick(r1, r2)
+        s3.tick(r1, r2)
         if __debug__:
             print('.')
         time.sleep(time_step)
