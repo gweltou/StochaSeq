@@ -210,19 +210,19 @@ class Basic(StochaPlayer):
     
     def f1(self, r):
         """Play a random note"""
-        pitch = random.choice(self.scale)
-        self.play_notes([pitch])
+        note = self.scale[int(r*len(self.scale))]
+        self.play_notes([note])
     
     def f2(self, r):
-        """Play two different random notes"""
-        note = random.choice(self.scale)
+        """Play two harmonious notes """
+        note = self.scale[int(r*len(self.scale))]
         interval = random.choice([4, 5, 6, 12]) ### TODO: this is bad
         self.play_notes([note, note+interval])
     
     def f3(self, r):
         """Play a triad"""
         ### TODO: la note de l'accord peut dépasser la valeur 127 !
-        root = random.choice(self.scale)
+        root = self.scale[int(r*len(self.scale))]
         chord_name, chord = self.chords[int(r*len(self.chords))]
         notes = [root+interval for interval in chord] 
         self.play_notes(notes)
