@@ -136,23 +136,23 @@ class StochaPlayer(object):
         """ Play notes with a given (or random if dur=None) duration
             
             Args:
-                dur: duration of the note (in ticks). If none (or value 0), a random duration
-                     will be chosen.
+                dur: duration of the note (in ticks). If none (or value 0),
+                     a random duration will be chosen.
             
-                Note duration:
-                    duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
+                Note duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
                     sixteenth note (semiquaver)		1
-                    eighth note (quaver)		2
-                    quarter note (crotchet)		4
-                    half note (minim)			8
-                    whole note (semibreve)		16
-                    double note (breve)			32
+                    eighth note (quaver)	    	2
+                    quarter note (crotchet)	    	4
+                    half note (minim)		    	8
+                    whole note (semibreve)	    	16
+                    double note (breve)			    32
         """
         vol = int(self.volume * random.gauss(64, 16))
         for note in notes:
             if __debug__:
-                print(note, end=' ')
-            self.midi.send(mido.Message('note_on', channel=self.channel, note=note, velocity=vol))
+                print(note, end=', ')
+            self.midi.send(mido.Message('note_on', channel=self.channel,
+                note=note, velocity=vol))
         if not dur:
             i = self.get_weighted_index(random.random(), self.weights[1])
             dur = self.durations[i]
@@ -165,7 +165,8 @@ class StochaPlayer(object):
             return
         if self.played_notes:
             for note in self.played_notes:
-                self.midi.send(mido.Message('note_off', channel=self.channel, note=note))
+                self.midi.send(mido.Message('note_off', channel=self.channel,
+                    note=note))
         
         i = self.get_weighted_index(r1, self.weights[0])
         eval("self.f{}(r2)".format(i))
@@ -312,7 +313,7 @@ class Monotone(StochaPlayer):
 ################################################################################
 
 
-class devicePickerGui:
+class DevicePickerGui:
     def __init__(self, top):
         self.top = top
         self.top.title("Midi output ports")
@@ -331,6 +332,65 @@ class devicePickerGui:
         top.destroy()
 
 
+class MainWindow(tk.Frame):
+    def __init__(self, master=None):
+        super(MainWindow, self).__init__(master)
+        self.master = master
+        self.master.title("StochaPlay")
+        #self.master.geometry("400x400")
+        
+        self.midiout = mido.open_output('amsynth:MIDI IN 129:0', autoreset=True)
+        self.tempo = tk.IntVar()
+        self.tempo.trace("w", self.update_time_step)
+        self.tempo.set(120)
+        s2 = Soloist(self.midiout, channel=1)
+        s2.set_volume(0.5)
+        s2.set_scale(create_scale(C2, minor, 2))
+        self.players = [s2]
+        
+        self.pack()
+        self.init_window()
+        
+        self.tick()
+    
+    def init_window(self):
+        # Menu
+        menu = tk.Menu(self)
+        self.master.config(menu=menu)
+        file = tk.Menu(menu)
+        file.add_command(label="Exit", command=self.client_exit)
+        menu.add_cascade(label="File", menu=file)
+        about = tk.Menu(menu)
+        menu.add_cascade(label="About", menu=about)
+        
+        self.box_tempo = tk.Spinbox(self, from_=1, to=240)
+        self.box_tempo["textvariable"] = self.tempo
+        #self.box_tempo.bind("<Button-1>", self.test)
+        self.box_tempo.pack(side="left")
+        
+        self.btn_mutate = tk.Button(self)
+        self.btn_mutate["text"] = "Mutate"
+        self.btn_mutate.pack(side="left")
+    
+    def update_time_step(self, *args):
+        dt = 60000 / self.tempo.get()
+        # Time step is divided by 4 for better resolution (4 ticks per beat)
+        dt /= TICKS_PER_BEAT
+        self.time_step = int(dt)
+    
+    def client_exit(self):
+        self.midiout.close()
+        self.master.destroy()
+        sys.exit()
+    
+    def tick(self):
+        r1 = random.random()
+        r2 = random.random()
+        for player in self.players:
+            player.tick(r1, r2)
+        self.master.after(self.time_step, self.tick)
+
+
 ################################################################################
 ################################################################################
 ################################################################################
@@ -342,9 +402,13 @@ if __name__ == '__main__':
         print(mido.get_output_names())
         
     midiout = None
+    """
     top = tk.Tk()
     devicePickerGui(top)
     top.mainloop()
+    """
+    
+    """
     s = Monotone(midiout, channel=0)
     #s.program_change(92)
     s.set_volume(0.5)
@@ -362,8 +426,15 @@ if __name__ == '__main__':
     time_step = 60/tempo
     # Time step is divided by 4 for better resolution (4 ticks per beat)
     time_step /= TICKS_PER_BEAT
-    
+    """
     random.seed(0)
+    
+    # Tkinter GUI below
+    root = tk.Tk()
+    app = MainWindow(master=root)
+    app.mainloop()
+    
+    """
     while True:
         r1 = random.random()
         r2 = random.random()
@@ -373,3 +444,6 @@ if __name__ == '__main__':
         if __debug__:
             print('.')
         time.sleep(time_step)
+    """
+    
+    midiout.close()
