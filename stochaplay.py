@@ -74,25 +74,6 @@ def create_scale(tonic, pattern, octave=1):
 ################################################################################
 
 
-class SPManager(object):
-    def __init__(self):
-        self.SPlayers = list()
-    
-    def register(self, player):
-        self.SPlayers.append(player)
-    
-    def mutate(self):
-        p = random.choice(self.SPlayers)
-        # Shuffle a single table
-        w = random.choice(p.weights)
-        random.shuffle(w)
-
-
-################################################################################
-################################################################################
-################################################################################
-
-
 class StochaPlayer(object):
     durations = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
     chords = [('Maj', (0, 4, 7)),
@@ -354,16 +335,60 @@ class DevicePickerGui:
 class MainWindow(tk.Frame):
     def __init__(self, master=None):
         super(MainWindow, self).__init__(master)
+        self.master = master
+        self.master.title("StochaPlay")
+        #self.master.geometry("400x400")
+        
+        self.midiout = mido.open_output('amsynth:MIDI IN 129:0', autoreset=True)
+        self.tempo = tk.IntVar()
+        self.tempo.trace("w", self.update_time_step)
+        self.tempo.set(120)
+        s2 = Soloist(self.midiout, channel=1)
+        s2.set_volume(0.5)
+        s2.set_scale(create_scale(C2, minor, 2))
+        self.players = [s2]
+        
         self.pack()
-        self.create_widgets()
+        self.init_window()
+        
+        self.tick()
     
-    def create_widgets(self):
+    def init_window(self):
+        # Menu
+        menu = tk.Menu(self)
+        self.master.config(menu=menu)
+        file = tk.Menu(menu)
+        file.add_command(label="Exit", command=self.client_exit)
+        menu.add_cascade(label="File", menu=file)
+        about = tk.Menu(menu)
+        menu.add_cascade(label="About", menu=about)
+        
+        self.box_tempo = tk.Spinbox(self, from_=1, to=240)
+        self.box_tempo["textvariable"] = self.tempo
+        #self.box_tempo.bind("<Button-1>", self.test)
+        self.box_tempo.pack(side="left")
+        
         self.btn_mutate = tk.Button(self)
         self.btn_mutate["text"] = "Mutate"
-        self.btn_mutate.pack(side="top")
-        
-        self.btn_quit = tk.Button(self, text="QUIT", command=root.destroy)
-        self.btn_quit.pack(side="bottom")
+        self.btn_mutate.pack(side="left")
+    
+    def update_time_step(self, *args):
+        dt = 60000 / self.tempo.get()
+        # Time step is divided by 4 for better resolution (4 ticks per beat)
+        dt /= TICKS_PER_BEAT
+        self.time_step = int(dt)
+    
+    def client_exit(self):
+        self.midiout.close()
+        self.master.destroy()
+        sys.exit()
+    
+    def tick(self):
+        r1 = random.random()
+        r2 = random.random()
+        for player in self.players:
+            player.tick(r1, r2)
+        self.master.after(self.time_step, self.tick)
 
 
 ################################################################################
@@ -383,6 +408,7 @@ if __name__ == '__main__':
     top.mainloop()
     """
     
+    """
     s = Monotone(midiout, channel=0)
     #s.program_change(92)
     s.set_volume(0.5)
@@ -395,23 +421,17 @@ if __name__ == '__main__':
     
     s3 = Pad(midiout, channel=3)
     s3.set_scale(create_scale(C2, minor, 1))
-
-    manager = SPManager()
-    manager.register(s)
-    manager.register(s2)
-    manager.register(s3)
     
     tempo = 120
     time_step = 60/tempo
     # Time step is divided by 4 for better resolution (4 ticks per beat)
     time_step /= TICKS_PER_BEAT
-    
+    """
     random.seed(0)
     
     # Tkinter GUI below
     root = tk.Tk()
     app = MainWindow(master=root)
-    #app.title("Stochaplay")
     app.mainloop()
     
     """
