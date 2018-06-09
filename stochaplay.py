@@ -74,6 +74,25 @@ def create_scale(tonic, pattern, octave=1):
 ################################################################################
 
 
+class SPManager(object):
+    def __init__(self):
+        self.SPlayers = list()
+    
+    def register(self, player):
+        self.SPlayers.append(player)
+    
+    def mutate(self):
+        p = random.choice(self.SPlayers)
+        # Shuffle a single table
+        w = random.choice(p.weights)
+        random.shuffle(w)
+
+
+################################################################################
+################################################################################
+################################################################################
+
+
 class StochaPlayer(object):
     durations = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
     chords = [('Maj', (0, 4, 7)),
@@ -136,23 +155,23 @@ class StochaPlayer(object):
         """ Play notes with a given (or random if dur=None) duration
             
             Args:
-                dur: duration of the note (in ticks). If none (or value 0), a random duration
-                     will be chosen.
+                dur: duration of the note (in ticks). If none (or value 0),
+                     a random duration will be chosen.
             
-                Note duration:
-                    duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
+                Note duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
                     sixteenth note (semiquaver)		1
-                    eighth note (quaver)		2
-                    quarter note (crotchet)		4
-                    half note (minim)			8
-                    whole note (semibreve)		16
-                    double note (breve)			32
+                    eighth note (quaver)	    	2
+                    quarter note (crotchet)	    	4
+                    half note (minim)		    	8
+                    whole note (semibreve)	    	16
+                    double note (breve)			    32
         """
         vol = int(self.volume * random.gauss(64, 16))
         for note in notes:
             if __debug__:
-                print(note, end=' ')
-            self.midi.send(mido.Message('note_on', channel=self.channel, note=note, velocity=vol))
+                print(note, end=', ')
+            self.midi.send(mido.Message('note_on', channel=self.channel,
+                note=note, velocity=vol))
         if not dur:
             i = self.get_weighted_index(random.random(), self.weights[1])
             dur = self.durations[i]
@@ -165,7 +184,8 @@ class StochaPlayer(object):
             return
         if self.played_notes:
             for note in self.played_notes:
-                self.midi.send(mido.Message('note_off', channel=self.channel, note=note))
+                self.midi.send(mido.Message('note_off', channel=self.channel,
+                    note=note))
         
         i = self.get_weighted_index(r1, self.weights[0])
         eval("self.f{}(r2)".format(i))
@@ -312,7 +332,7 @@ class Monotone(StochaPlayer):
 ################################################################################
 
 
-class devicePickerGui:
+class DevicePickerGui:
     def __init__(self, top):
         self.top = top
         self.top.title("Midi output ports")
@@ -331,6 +351,21 @@ class devicePickerGui:
         top.destroy()
 
 
+class MainWindow(tk.Frame):
+    def __init__(self, master=None):
+        super(MainWindow, self).__init__(master)
+        self.pack()
+        self.create_widgets()
+    
+    def create_widgets(self):
+        self.btn_mutate = tk.Button(self)
+        self.btn_mutate["text"] = "Mutate"
+        self.btn_mutate.pack(side="top")
+        
+        self.btn_quit = tk.Button(self, text="QUIT", command=root.destroy)
+        self.btn_quit.pack(side="bottom")
+
+
 ################################################################################
 ################################################################################
 ################################################################################
@@ -342,9 +377,12 @@ if __name__ == '__main__':
         print(mido.get_output_names())
         
     midiout = None
+    """
     top = tk.Tk()
     devicePickerGui(top)
     top.mainloop()
+    """
+    
     s = Monotone(midiout, channel=0)
     #s.program_change(92)
     s.set_volume(0.5)
@@ -357,6 +395,11 @@ if __name__ == '__main__':
     
     s3 = Pad(midiout, channel=3)
     s3.set_scale(create_scale(C2, minor, 1))
+
+    manager = SPManager()
+    manager.register(s)
+    manager.register(s2)
+    manager.register(s3)
     
     tempo = 120
     time_step = 60/tempo
@@ -364,6 +407,14 @@ if __name__ == '__main__':
     time_step /= TICKS_PER_BEAT
     
     random.seed(0)
+    
+    # Tkinter GUI below
+    root = tk.Tk()
+    app = MainWindow(master=root)
+    #app.title("Stochaplay")
+    app.mainloop()
+    
+    """
     while True:
         r1 = random.random()
         r2 = random.random()
@@ -373,3 +424,6 @@ if __name__ == '__main__':
         if __debug__:
             print('.')
         time.sleep(time_step)
+    """
+    
+    midiout.close()
