@@ -77,7 +77,7 @@ def create_scale(tonic, pattern, octave=1):
 ################################################################################
 ################################################################################
 
-
+"""
 class DevicePickerGui:
     def __init__(self, top):
         self.top = top
@@ -96,32 +96,137 @@ class DevicePickerGui:
         global midiout
         midiout = mido.open_output(device, autoreset=True)
         top.destroy()
+"""
 
 
 class PlayerUI(tk.Frame):
     def __init__(self, master, player):
         super(PlayerUI, self).__init__(master)
+        self.master = master
         self.player = player
         self.active = tk.IntVar()
         self.active.set(True)
         btn_activate = tk.Checkbutton(self, variable=self.active,
             command=self.activate)
-        btn_activate.pack()
-        lbl = tk.Label(self)
-        lbl["text"] = "yooooo"
-        lbl.pack()
+        btn_activate.pack(side="left")
+        
+        btn_midi = tk.Button(self, text="MIDI",
+            command=self.open_midi_dialog)
+        btn_midi.pack(side="left")
+        
+        btn_key = tk.Button(self, text="Key",
+            command=self.open_key_dialog)
+        btn_key.pack(side="left")
+        
+        btn_weights = tk.Button(self, text="Probability weights",
+            command=self.open_weights_dialog)
+        btn_weights.pack(side="left")
     
     def activate(self):
         self.player.active = self.active.get()
     
+    def open_midi_dialog(self):
+        dialog = MidiDialog(self.master, self.player)
+    
+    def open_key_dialog(self):
+        dialog = KeyDialog(self.master, self.player)
+    
+    def open_weights_dialog(self):
+        pass
+    
     def tick(self, *args):
         self.player.tick(*args)
+
+
+class MidiDialog(tk.Toplevel):
+    def __init__(self, master, player):
+        super(MidiDialog, self).__init__(master)
+        self.player = player
+        
+        self.channel = tk.IntVar()
+        self.channel.set(self.player.channel)
+        self.channel.trace("w", self.on_channel)
+        spinb_channel = tk.Spinbox(self, from_=1, to=16)
+        spinb_channel["textvariable"] = self.channel
+        tk.Label(self, text="Midi channel:").pack()
+        spinb_channel.pack()
+        self.program = tk.IntVar()
+        self.program.set(self.player.program)
+        self.program.trace("w", self.on_program)
+        spinb_program = tk.Spinbox(self, from_=0, to=127)
+        spinb_program["textvariable"] = self.program
+        tk.Label(self, text="Midi program:").pack()
+        spinb_program.pack()
+        self.volume = tk.IntVar()
+        self.volume.set(self.player.volume*100)
+        self.volume.trace("w", self.on_volume)
+        scale_volume = tk.Scale(self, from_=0, to=100, orient=tk.HORIZONTAL)
+        scale_volume["variable"] = self.volume
+        tk.Label(self, text="Volume:").pack()
+        scale_volume.pack()
+    
+    def on_channel(self, *args):
+        self.player.channel = self.channel.get()
+    
+    def on_program(self, *args):
+        self.player.program_change(self.program.get())
+    
+    def on_volume(self, *args):
+        self.player.set_volume(self.volume.get()/100)
+
+
+class KeyDialog(tk.Toplevel):
+    def __init__(self, master, player):
+        super(KeyDialog, self).__init__(master)
+        self.master = master
+        self.player = player
+        
+        tk.Label(self, text="Scale:").pack()
+        self.scale_frame = tk.Frame(self)
+        self.scale_frame.pack()
+        scrollbar = tk.Scrollbar(self.scale_frame, orient=tk.VERTICAL)
+        scrollbar.config(command=self.yview)
+        scrollbar.pack(side="right", fill=tk.Y)
+        self.listb_scales = tk.Listbox(self.scale_frame,
+            yscrollcommand=scrollbar.set)
+        self.listb_scales.pack()
+        self.listb_scales.bind('<<ListboxSelect>>', self.on_scale)
+        for s in sorted(scales.keys()):
+            self.listb_scales.insert(tk.END, s)
+        
+        self.rootnote = tk.IntVar()
+        self.rootnote.set(self.player.scale[0])
+        self.rootnote.trace("w", self.on_scale)
+        self.spinb_rootnote = tk.Spinbox(self, from_=0, to=127)
+        self.spinb_rootnote["textvariable"] = self.rootnote
+        tk.Label(self, text="Root note:").pack()
+        self.spinb_rootnote.pack()
+        
+        self.octavespan = tk.IntVar()
+        self.octavespan.set(1)
+        self.octavespan.trace("w", self.on_scale)
+        self.spinb_octavespan = tk.Spinbox(self, from_=1, to=5)
+        self.spinb_octavespan["textvariable"] = self.octavespan
+        tk.Label(self, text="Span (octaves):").pack()
+        self.spinb_octavespan.pack()
+    
+    def yview(self, *args):
+        self.listb_scales.yview(*args)
+    
+    def on_scale(self, *args):
+        index = self.listb_scales.curselection()
+        print(index) ###
+        scale_name = self.listb_scales.get(index)
+        print("Changed scale to {}".format(scale_name))
+        self.player.set_scale(create_scale(self.rootnote.get(),
+            scales[scale_name], self.octavespan.get()))
 
 
 class MainWindow(tk.Frame):
     def __init__(self, master=None):
         super(MainWindow, self).__init__(master)
         self.master = master
+        self.master.protocol("WM_DELETE_WINDOW", self.client_exit)
         self.master.title("StochaPlay")
         #self.master.geometry("400x400")
         
@@ -139,14 +244,19 @@ class MainWindow(tk.Frame):
         self.tick()
     
     def init_players(self):
-        s = Soloist(self.midiout, channel=0)
+        s = Soloist(self.midiout, channel=2)
         s.set_volume(0.5)
-        s.set_scale(create_scale(C2, scales['minor']))
+        s.set_scale(create_scale(C2, scales['gypsy'], 3))
         s2 = Pad(self.midiout, channel=1)
         s2.set_volume(0.5)
         s2.set_scale(create_scale(C1, scales['minor'], 2))
         self.add_player(s)
         self.add_player(s2)
+    
+    def add_player(self, player):
+        p = PlayerUI(self.frame_players, player)
+        p.pack()
+        self.players.append(p)
     
     def init_window(self):
         # Menu
@@ -158,23 +268,21 @@ class MainWindow(tk.Frame):
         about = tk.Menu(menu)
         menu.add_cascade(label="About", menu=about)
         
-        self.box_tempo = tk.Spinbox(self, from_=1, to=240)
-        self.box_tempo["textvariable"] = self.tempo
-        #self.box_tempo.bind("<Button-1>", self.test)
-        self.box_tempo.pack(side="left")
+        self.toolbar = tk.Frame(self)
+        self.toolbar.pack()
+        self.spinb_tempo = tk.Spinbox(self.toolbar, from_=1, to=240)
+        self.spinb_tempo["textvariable"] = self.tempo
+        #self.spinb_tempo.bind("<Button-1>", self.test)
+        self.spinb_tempo.pack()
         
+        """
         self.btn_mutate = tk.Button(self)
         self.btn_mutate["text"] = "Mutate"
         self.btn_mutate.pack(side="left")
+        """
         
         self.frame_players = tk.Frame(self)
         self.frame_players.pack()
-    
-    def add_player(self, player):
-        p = PlayerUI(self.frame_players, player)
-        p.pack()
-        self.players.append(p)
-        print(self.players) ###
     
     def update_time_step(self, *args):
         dt = 60000 / self.tempo.get()
@@ -183,6 +291,7 @@ class MainWindow(tk.Frame):
         self.time_step = int(dt)
     
     def client_exit(self):
+        print("Goodbye !")
         self.midiout.close()
         self.master.destroy()
         sys.exit()
@@ -214,7 +323,7 @@ if __name__ == '__main__':
     top.mainloop()
     """
     
-    random.seed(0)
+    #random.seed(0)
     
     # Tkinter GUI below
     root = tk.Tk()

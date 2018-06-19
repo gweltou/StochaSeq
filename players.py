@@ -17,6 +17,7 @@ class StochaPlayer(object):
         assert(midiout)
         self.midi = midiout
         self.channel = channel
+        self.program = 0
         self.volume = 1
         self.timesig = timesig
         self.active = True
@@ -61,6 +62,7 @@ class StochaPlayer(object):
         if __debug__:
             print(m)
         self.midi.send(m)
+        self.program = num
     
     def set_volume(self, vol):
         self.volume = vol
