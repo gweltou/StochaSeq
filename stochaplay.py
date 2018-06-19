@@ -8,6 +8,7 @@ import random
 import time
 import heapq
 import mido
+from players import *
 
 # Backward compatibility with python 2.7
 if sys.version_info[0] < 3:
@@ -23,25 +24,27 @@ C2 = 48
 C3 = 60
 
 # diatonic scales
-ionian = [2, 2, 1, 2, 2, 2, 1]
-major = ionian
-dorian = [2, 1, 2, 2, 2, 1, 2]
-phrygian = [1, 2, 2, 2, 1, 2, 2]
-lydian = [2, 2, 2, 1, 2, 2, 1]
-myxolidian = [2, 2, 1, 2, 2, 1, 2]
-aeolian = [2, 1, 2, 2, 1, 2, 2]
-minor = aeolian
-locrian = [1, 2, 2, 1, 2, 2, 2]
+scales = {
+    'ionian':      [2, 2, 1, 2, 2, 2, 1],
+    'dorian':      [2, 1, 2, 2, 2, 1, 2],
+    'phrygian':    [1, 2, 2, 2, 1, 2, 2],
+    'lydian':      [2, 2, 2, 1, 2, 2, 1],
+    'myxolidian':  [2, 2, 1, 2, 2, 1, 2],
+    'aeolian':     [2, 1, 2, 2, 1, 2, 2],
+    'locrian':     [1, 2, 2, 1, 2, 2, 2],
 
-hirajoshi = [4, 2, 1, 4, 1]
-insen = [1, 4, 2, 3, 2]
-iwato = [1, 4, 1, 4, 2]
+    'hirajoshi':   [4, 2, 1, 4, 1],
+    'insen':       [1, 4, 2, 3, 2],
+    'iwato':       [1, 4, 1, 4, 2],
 
-enigmatic = [1, 3, 2, 2, 2, 1, 1]
-flamenco = [1, 3, 1, 2, 1, 3, 1]
-gypsy = [2, 1, 3, 1, 1, 2, 2]
-prometheus = [2, 2, 2, 3, 1, 2]
-phrygiandom = [1, 3, 1, 2, 1, 2, 2]
+    'enigmatic':   [1, 3, 2, 2, 2, 1, 1],
+    'flamenco':    [1, 3, 1, 2, 1, 3, 1],
+    'gypsy':       [2, 1, 3, 1, 1, 2, 2],
+    'prometheus':  [2, 2, 2, 3, 1, 2],
+    'phrygiandom': [1, 3, 1, 2, 1, 2, 2],
+}
+scales['major'] = scales['ionian']
+scales['minor'] = scales['aeolian']
 
 
 def create_scale(tonic, pattern, octave=1):
@@ -69,244 +72,6 @@ def create_scale(tonic, pattern, octave=1):
     return scale
 
 
-################################################################################
-################################################################################
-################################################################################
-
-
-class StochaPlayer(object):
-    durations = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
-    chords = [('Maj', (0, 4, 7)),
-              ('min', (0, 3, 7)),
-              ('Aug', (0, 4, 8)),
-              ('dim', (0, 3, 6)),
-              ]
-    
-    def __init__(self, midiout, channel=0, timesig=(4,4)):
-        self.midi = midiout
-        self.channel = channel
-        self.volume = 1
-        self.timesig = timesig
-        self.wait_nticks = 0
-        self.played_notes = []
-        self.scale = create_scale(C2, major)  # Set au default music scale
-        self.weigths_desc = ["function", "note/chord duration", "silence duration"]
-        self.update_weights([[5, 2, 2, 1],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
-    
-    def set_scale(self, scale):
-        self.scale = sorted(scale)
-    
-    def update_weights(self, weights):
-        formatted = []
-        for table in weights:
-            s = sum(table)
-            cumul = 0
-            formatted_table = []
-            for w in table:
-                formatted_table.append((w+cumul)/s)
-                cumul += w
-            formatted.append(formatted_table)
-        self.weights = formatted
-    
-    def get_weighted_index(self, r, weights):
-        """Returns an index number depending on r and weights
-           
-           Args:
-               r: a float between 0 and 1
-               weights: list of weights
-           
-           Returns: an index number (between 0 and len(weights)-1)
-        """
-        for i, p in enumerate(weights):
-            if r < p:
-                return i
-    
-    def program_change(self, num=0):
-        m = mido.Message('program_change', channel=self.channel, program=num)
-        if __debug__:
-            print(m)
-        self.midi.send(m)
-    
-    def set_volume(self, vol):
-        self.volume = vol
-    
-    def play_notes(self, notes, dur=None):
-        """ Play notes with a given (or random if dur=None) duration
-            
-            Args:
-                dur: duration of the note (in ticks). If none (or value 0),
-                     a random duration will be chosen.
-            
-                Note duration (in ticks) = note value × self.timesig[1] × TICKS_PER_BEAT
-                    sixteenth note (semiquaver)		1
-                    eighth note (quaver)	    	2
-                    quarter note (crotchet)	    	4
-                    half note (minim)		    	8
-                    whole note (semibreve)	    	16
-                    double note (breve)			    32
-        """
-        vol = int(self.volume * random.gauss(64, 16))
-        for note in notes:
-            if __debug__:
-                print(note, end=', ')
-            self.midi.send(mido.Message('note_on', channel=self.channel,
-                note=note, velocity=vol))
-        if not dur:
-            i = self.get_weighted_index(random.random(), self.weights[1])
-            dur = self.durations[i]
-        self.wait_nticks = dur - 1  # skip a tick
-        self.played_notes = notes
-    
-    def tick(self, r1, r2):
-        if self.wait_nticks > 0:
-            self.wait_nticks -= 1
-            return
-        if self.played_notes:
-            for note in self.played_notes:
-                self.midi.send(mido.Message('note_off', channel=self.channel,
-                    note=note))
-        
-        i = self.get_weighted_index(r1, self.weights[0])
-        eval("self.f{}(r2)".format(i))
-    
-    def f0(self, r):
-        """Silence"""
-        i = self.get_weighted_index(random.random(), self.weights[2])
-        self.wait_nticks = self.durations[i] - 1
-        if __debug__:
-            print('-', end=' ')
-
-
-class Chaotic(StochaPlayer):
-    def __init__(self, midiout, channel=0, timesig=(4,4)):
-        super(Chaotic, self).__init__(midiout, channel, timesig)
-        self.update_weights([[5, 2, 2, 1],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
-    
-    def f1(self, r):
-        """Play a random note"""
-        pitch = random.choice(self.scale)
-        self.play_notes([pitch])
-    
-    def f2(self, r):
-        """Play two different random notes"""
-        notes = random.sample(self.scale, 2)
-        self.play_notes(notes)
-    
-    def f3(self, r):
-        """Play three different random notes"""
-        notes = random.sample(self.scale, 3)
-        self.play_notes(notes)
-
-
-class Basic(StochaPlayer):
-    def __init__(self, midiout, channel=0, timesig=(4,4)):
-        super(Basic, self).__init__(midiout, channel, timesig)
-        self.update_weights([[5, 2, 2, 1],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
-    
-    def f1(self, r):
-        """Play a random note"""
-        note = self.scale[int(r*len(self.scale))]
-        self.play_notes([note])
-    
-    def f2(self, r):
-        """Play two harmonious notes """
-        note = self.scale[int(r*len(self.scale))]
-        interval = random.choice([4, 5, 7, 12]) ### TODO: this is bad
-        self.play_notes([note, note+interval])
-    
-    def f3(self, r):
-        """Play a triad"""
-        ### TODO: la note de l'accord peut dépasser la valeur 127 !
-        root = self.scale[int(r*len(self.scale))]
-        chord_name, chord = self.chords[int(r*len(self.chords))]
-        notes = [root+interval for interval in chord] 
-        self.play_notes(notes)
-        print(chord_name, end=' ')
-
-
-class Soloist(StochaPlayer):
-    def __init__(self, midiout, channel=0, timesig=(4,4)):
-        super(Soloist, self).__init__(midiout, channel, timesig)
-        self.direction = 1
-        self.index = 0
-        self.update_weights([[2, 1, 4, 4, 2],
-            [8, 12, 1, 4, 0, 1, 0, 0, 0, 0],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
-    
-    def f1(self, r):
-        """Play a new random note"""
-        self.index = int(r*len(self.scale))
-        self.play_notes([self.scale[self.index]])
-    
-    def f2(self, r):
-        """Play next note on scale (1 step)"""
-        self.index = (self.index + self.direction) % len(self.scale)
-        self.play_notes([self.scale[self.index]])
-    
-    def f3(self, r):
-        """Play next note on scale (2 steps)"""
-        self.index = (self.index + 2*self.direction) % len(self.scale)
-        self.play_notes([self.scale[self.index]])
-    
-    def f4(self, r):
-        """Change direction (up/down)"""
-        self.direction = -self.direction
-        self.f2(r)
-
-
-class Pad(Basic):
-    def __init__(self, midiout, channel=0, timesig=(4,4)):
-        super(Pad, self).__init__(midiout, channel, timesig)
-        self.durations = list(map(lambda x: x*4, self.durations))
-        self.update_weights([[6, 2, 2, 4],
-            [1, 2, 0, 10, 0, 6, 0, 6, 0, 4],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
-
-
-class Monotone(StochaPlayer):
-    def __init__(self, midiout, channel=0, timesig=(4,4)):
-        super(Monotone, self).__init__(midiout, channel, timesig)
-        self.pitch = random.choice(self.scale)
-        self.durations = list(map(lambda x: x*4, self.durations))
-        self.update_weights([[1, 10, 2, 1],
-            [],
-            [1, 2, 0, 10, 0, 4, 0, 1, 0, 1]])
-        self.halfbeat = False
-    
-    def tick(self, r1, r2):
-        if self.wait_nticks > 0:
-            self.wait_nticks -= 1
-            return
-        if self.played_notes:
-            for note in self.played_notes:
-                self.midi.send(mido.Message('note_off', channel=self.channel, note=note))
-        
-        if self.halfbeat:
-            self.f2(r2)
-        else:
-            i = self.get_weighted_index(r1, self.weights[0])
-            eval("self.f{}(r2)".format(i))
-    
-    def f1(self, r):
-        """Play on beat"""
-        self.play_notes([self.pitch], TICKS_PER_BEAT)
-    
-    def f2(self, r):
-        """Play on half beat"""
-        self.play_notes([self.pitch], TICKS_PER_BEAT//2)
-        self.halfbeat = not self.halfbeat
-   
-    def f3(self, r):
-        """Change pitch"""
-        self.pitch = self.scale[int(r*len(self.scale))]
-        self.f1(r)
-
 
 ################################################################################
 ################################################################################
@@ -323,7 +88,8 @@ class DevicePickerGui:
         self.buttons = []
         
         for d in mido.get_output_names():
-            self.buttons.append(tk.Button(frame, text=d, command=lambda dev=d: self.openPort(dev)))
+            self.buttons.append(tk.Button(frame, text=d,
+                command=lambda dev=d: self.openPort(dev)))
             self.buttons[-1].pack()
         
     def openPort(self, device):
@@ -337,15 +103,19 @@ class PlayerUI(tk.Frame):
         super(PlayerUI, self).__init__(master)
         self.player = player
         self.active = tk.IntVar()
-        btn_activate = tk.Checkbutton(self, variable=self.active)
+        self.active.set(True)
+        btn_activate = tk.Checkbutton(self, variable=self.active,
+            command=self.activate)
         btn_activate.pack()
         lbl = tk.Label(self)
         lbl["text"] = "yooooo"
         lbl.pack()
     
+    def activate(self):
+        self.player.active = self.active.get()
+    
     def tick(self, *args):
-        if self.active.get() == 1:
-            self.player.tick(*args)
+        self.player.tick(*args)
 
 
 class MainWindow(tk.Frame):
@@ -356,6 +126,7 @@ class MainWindow(tk.Frame):
         #self.master.geometry("400x400")
         
         self.midiout = mido.open_output('amsynth:MIDI IN 128:0', autoreset=True)
+        assert(self.midiout)
         self.tempo = tk.IntVar()
         self.tempo.trace("w", self.update_time_step)
         self.tempo.set(120)
@@ -363,16 +134,19 @@ class MainWindow(tk.Frame):
         
         self.pack()
         self.init_window()
-        
-        s = Soloist(self.midiout, channel=0)
-        s.set_volume(0.5)
-        s.set_scale(create_scale(C2, minor))
-        s2 = Pad(self.midiout, channel=1)
-        s2.set_volume(0.5)
-        s2.set_scale(create_scale(C2, minor, 2))
-        self.add_player(s)
+        self.init_players()
         
         self.tick()
+    
+    def init_players(self):
+        s = Soloist(self.midiout, channel=0)
+        s.set_volume(0.5)
+        s.set_scale(create_scale(C2, scales['minor']))
+        s2 = Pad(self.midiout, channel=1)
+        s2.set_volume(0.5)
+        s2.set_scale(create_scale(C1, scales['minor'], 2))
+        self.add_player(s)
+        self.add_player(s2)
     
     def init_window(self):
         # Menu
@@ -400,6 +174,7 @@ class MainWindow(tk.Frame):
         p = PlayerUI(self.frame_players, player)
         p.pack()
         self.players.append(p)
+        print(self.players) ###
     
     def update_time_step(self, *args):
         dt = 60000 / self.tempo.get()
@@ -439,25 +214,9 @@ if __name__ == '__main__':
     top.mainloop()
     """
     
-    """
-    s = Monotone(midiout, channel=0)
-    #s.program_change(92)
-    s.set_volume(0.5)
-    s.set_scale(create_scale(C2, minor, 1))
-    
-    s2 = Soloist(midiout, channel=1)
-    s2.set_volume(0.5)
-    #s2.program_change(84)
-    s2.set_scale(create_scale(C2, minor, 2))
-    
-    s3 = Pad(midiout, channel=3)
-    s3.set_scale(create_scale(C2, minor, 1))
-    """
     random.seed(0)
     
     # Tkinter GUI below
     root = tk.Tk()
     app = MainWindow(master=root)
     app.mainloop()
-    
-    midiout.close()
