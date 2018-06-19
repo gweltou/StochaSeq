@@ -217,7 +217,7 @@ class Basic(StochaPlayer):
     def f2(self, r):
         """Play two harmonious notes """
         note = self.scale[int(r*len(self.scale))]
-        interval = random.choice([4, 5, 6, 12]) ### TODO: this is bad
+        interval = random.choice([4, 5, 7, 12]) ### TODO: this is bad
         self.play_notes([note, note+interval])
     
     def f3(self, r):
@@ -332,6 +332,22 @@ class DevicePickerGui:
         top.destroy()
 
 
+class PlayerUI(tk.Frame):
+    def __init__(self, master, player):
+        super(PlayerUI, self).__init__(master)
+        self.player = player
+        self.active = tk.IntVar()
+        btn_activate = tk.Checkbutton(self, variable=self.active)
+        btn_activate.pack()
+        lbl = tk.Label(self)
+        lbl["text"] = "yooooo"
+        lbl.pack()
+    
+    def tick(self, *args):
+        if self.active.get() == 1:
+            self.player.tick(*args)
+
+
 class MainWindow(tk.Frame):
     def __init__(self, master=None):
         super(MainWindow, self).__init__(master)
@@ -339,17 +355,22 @@ class MainWindow(tk.Frame):
         self.master.title("StochaPlay")
         #self.master.geometry("400x400")
         
-        self.midiout = mido.open_output('amsynth:MIDI IN 129:0', autoreset=True)
+        self.midiout = mido.open_output('amsynth:MIDI IN 128:0', autoreset=True)
         self.tempo = tk.IntVar()
         self.tempo.trace("w", self.update_time_step)
         self.tempo.set(120)
-        s2 = Soloist(self.midiout, channel=1)
-        s2.set_volume(0.5)
-        s2.set_scale(create_scale(C2, minor, 2))
-        self.players = [s2]
+        self.players = []
         
         self.pack()
         self.init_window()
+        
+        s = Soloist(self.midiout, channel=0)
+        s.set_volume(0.5)
+        s.set_scale(create_scale(C2, minor))
+        s2 = Pad(self.midiout, channel=1)
+        s2.set_volume(0.5)
+        s2.set_scale(create_scale(C2, minor, 2))
+        self.add_player(s)
         
         self.tick()
     
@@ -371,6 +392,14 @@ class MainWindow(tk.Frame):
         self.btn_mutate = tk.Button(self)
         self.btn_mutate["text"] = "Mutate"
         self.btn_mutate.pack(side="left")
+        
+        self.frame_players = tk.Frame(self)
+        self.frame_players.pack()
+    
+    def add_player(self, player):
+        p = PlayerUI(self.frame_players, player)
+        p.pack()
+        self.players.append(p)
     
     def update_time_step(self, *args):
         dt = 60000 / self.tempo.get()
@@ -386,8 +415,10 @@ class MainWindow(tk.Frame):
     def tick(self):
         r1 = random.random()
         r2 = random.random()
-        for player in self.players:
-            player.tick(r1, r2)
+        for p in self.players:
+            p.tick(r1, r2)
+        if __debug__:
+            print('.')
         self.master.after(self.time_step, self.tick)
 
 
@@ -421,11 +452,6 @@ if __name__ == '__main__':
     
     s3 = Pad(midiout, channel=3)
     s3.set_scale(create_scale(C2, minor, 1))
-    
-    tempo = 120
-    time_step = 60/tempo
-    # Time step is divided by 4 for better resolution (4 ticks per beat)
-    time_step /= TICKS_PER_BEAT
     """
     random.seed(0)
     
@@ -433,17 +459,5 @@ if __name__ == '__main__':
     root = tk.Tk()
     app = MainWindow(master=root)
     app.mainloop()
-    
-    """
-    while True:
-        r1 = random.random()
-        r2 = random.random()
-        s.tick(r1, r2)
-        s2.tick(r1, r2)
-        s3.tick(r1, r2)
-        if __debug__:
-            print('.')
-        time.sleep(time_step)
-    """
     
     midiout.close()
