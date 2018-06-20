@@ -4,6 +4,8 @@
 import random
 import mido
 
+TICKS_PER_BEAT = 4
+
 
 class StochaPlayer(object):
     durations = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
@@ -20,10 +22,12 @@ class StochaPlayer(object):
         self.program = 0
         self.volume = 1
         self.timesig = timesig
-        self.active = True
+        self.active = False
         self.wait_nticks = 0
         self.played_notes = []
         self.scale = scale
+        if self.scale:
+            self.set_scale(self.scale)
         self.weigths_desc = ["function", "note/chord duration", "silence duration"]
         self.update_weights([[5, 2, 2, 1],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
@@ -33,16 +37,16 @@ class StochaPlayer(object):
         self.scale = sorted(scale)
     
     def update_weights(self, weights):
-        formatted = []
-        for table in weights:
+        self.weights = weights
+        self._fweights = []
+        for table in self.weights:
             s = sum(table)
             cumul = 0
             formatted_table = []
             for w in table:
                 formatted_table.append((w+cumul)/s)
                 cumul += w
-            formatted.append(formatted_table)
-        self.weights = formatted
+            self._fweights.append(formatted_table)
     
     def get_weighted_index(self, r, weights):
         """Returns an index number depending on r and weights
@@ -89,7 +93,7 @@ class StochaPlayer(object):
             self.midi.send(mido.Message('note_on', channel=self.channel,
                 note=note, velocity=vol))
         if not dur:
-            i = self.get_weighted_index(random.random(), self.weights[1])
+            i = self.get_weighted_index(random.random(), self._fweights[1])
             dur = self.durations[i]
         self.wait_nticks = dur - 1  # skip a tick
         self.played_notes = notes
@@ -104,18 +108,20 @@ class StochaPlayer(object):
                     note=note))
         
         if self.active:
-            i = self.get_weighted_index(r1, self.weights[0])
+            i = self.get_weighted_index(r1, self._fweights[0])
             eval("self.f{}(r2)".format(i))
     
     def f0(self, r):
         """Silence"""
-        i = self.get_weighted_index(random.random(), self.weights[2])
+        i = self.get_weighted_index(random.random(), self._fweights[2])
         self.wait_nticks = self.durations[i] - 1
         if __debug__:
             print('-', end=' ')
 
 
 class Chaotic(StochaPlayer):
+    name = "Chaotic"
+    
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Chaotic, self).__init__(midiout, channel, timesig)
         self.update_weights([[5, 2, 2, 1],
@@ -139,6 +145,8 @@ class Chaotic(StochaPlayer):
 
 
 class Basic(StochaPlayer):
+    name = "Basic"
+    
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Basic, self).__init__(midiout, channel, timesig)
         self.update_weights([[5, 2, 2, 1],
@@ -159,14 +167,15 @@ class Basic(StochaPlayer):
     def f3(self, r):
         """Play a triad"""
         ### TODO: la note de l'accord peut dépasser la valeur 127 !
-        root = self.scale[int(r*len(self.scale))]
-        chord_name, chord = self.chords[int(r*len(self.chords))]
-        notes = [root+interval for interval in chord] 
-        self.play_notes(notes)
-        print(chord_name, end=' ')
+        i0 = int(r*len(self.scale))
+        i1 = (i0+2) % len(self.scale)
+        i2 = (i0+4) % len(self.scale)
+        self.play_notes([self.scale[i0], self.scale[i1], self.scale[i2]])
 
 
 class Soloist(StochaPlayer):
+    name = "Soloist"
+    
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Soloist, self).__init__(midiout, channel, timesig)
         self.direction = 1
@@ -197,6 +206,8 @@ class Soloist(StochaPlayer):
 
 
 class Pad(Basic):
+    name = "Pad"
+    
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Pad, self).__init__(midiout, channel, timesig)
         self.durations = list(map(lambda x: x*4, self.durations))
@@ -206,14 +217,20 @@ class Pad(Basic):
 
 
 class Monotone(StochaPlayer):
+    name = "Monotone"
+    
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Monotone, self).__init__(midiout, channel, timesig)
-        self.pitch = random.choice(self.scale)
+        self.pitch = None
         self.durations = list(map(lambda x: x*4, self.durations))
         self.update_weights([[1, 10, 2, 1],
             [],
             [1, 2, 0, 10, 0, 4, 0, 1, 0, 1]])
         self.halfbeat = False
+    
+    def set_scale(self, scale):
+        self.scale = sorted(scale)
+        self.pitch = random.choice(self.scale)
     
     def tick(self, r1, r2):
         if self.wait_nticks > 0:
@@ -221,25 +238,31 @@ class Monotone(StochaPlayer):
             return
         if self.played_notes:
             for note in self.played_notes:
-                self.midi.send(mido.Message('note_off', channel=self.channel, note=note))
+                self.midi.send(mido.Message('note_off',
+                     channel=self.channel, note=note))
         
+        if not self.active:
+            return
         if self.halfbeat:
             self.f2(r2)
         else:
-            i = self.get_weighted_index(r1, self.weights[0])
+            i = self.get_weighted_index(r1, self._fweights[0])
             eval("self.f{}(r2)".format(i))
     
     def f1(self, r):
         """Play on beat"""
-        self.play_notes([self.pitch], TICKS_PER_BEAT)
+        if self.pitch:
+            self.play_notes([self.pitch], TICKS_PER_BEAT)
     
     def f2(self, r):
         """Play on half beat"""
-        self.play_notes([self.pitch], TICKS_PER_BEAT//2)
-        self.halfbeat = not self.halfbeat
+        if self.pitch:
+            self.play_notes([self.pitch], TICKS_PER_BEAT//2)
+            self.halfbeat = not self.halfbeat
    
     def f3(self, r):
         """Change pitch"""
         self.pitch = self.scale[int(r*len(self.scale))]
+        if self.pitch > 127: print(self.pitch, r)
         self.f1(r)
 
