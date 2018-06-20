@@ -17,15 +17,15 @@ else:
     import tkinter as tk
 
 
+## CONSTANTS
 C1 = 36
 C2 = 48
 C3 = 60
 
 PLAYERS = [Basic, Chaotic, Soloist, Pad, Monotone]
 
-
 # Diatonic scales
-scales = {
+SCALES = {
     'ionian/Major': [2, 2, 1, 2, 2, 2, 1],
     'dorian':       [2, 1, 2, 2, 2, 1, 2],
     'phrygian':     [1, 2, 2, 2, 1, 2, 2],
@@ -197,10 +197,10 @@ class MidiDialog(tk.Toplevel):
         scale_volume.pack()
         
         # OK Button
-        btn_ok = tk.Button(self, text="OK", command=self.on_ok)
+        btn_ok = tk.Button(self, text="OK", command=self.ok)
         btn_ok.pack()
         
-    def on_ok(self):
+    def ok(self, *args):
         self.player.channel = self.channel.get()
         self.player.program_change(self.program.get())
         self.player.set_volume(self.volume.get()/100)
@@ -230,8 +230,8 @@ class KeyDialog(tk.Toplevel):
         self.listb_scales = tk.Listbox(self.scale_frame,
             yscrollcommand=scrollbar.set)
         self.listb_scales.pack()
-        self.listb_scales.bind('<Double-Button-1>', self.on_ok)
-        for s in sorted(scales.keys()):
+        self.listb_scales.bind('<Double-Button-1>', self.ok)
+        for s in sorted(SCALES.keys()):
             self.listb_scales.insert(tk.END, s)
         
         self.rootnote = tk.IntVar()
@@ -249,18 +249,18 @@ class KeyDialog(tk.Toplevel):
         self.spinb_octavespan.pack()
         
         # OK Button
-        btn_ok = tk.Button(self, text="OK", command=self.on_ok)
+        btn_ok = tk.Button(self, text="OK", command=self.ok)
         btn_ok.pack()
     
     def yview(self, *args):
         self.listb_scales.yview(*args)
     
-    def on_ok(self, *args):
+    def ok(self, *args):
         index = self.listb_scales.curselection()
         scale_name = self.listb_scales.get(tk.ACTIVE)
         print("Changed {} scale to {}".format(self.player.name, scale_name))
         self.player.set_scale(create_scale(self.rootnote.get(),
-            scales[scale_name], self.octavespan.get()))
+            SCALES[scale_name], self.octavespan.get()))
     
     def close_window(self):
         self.master.dialog_key = None
@@ -268,7 +268,7 @@ class KeyDialog(tk.Toplevel):
 
 
 class AddDialog(tk.Toplevel):
-    default_scale = create_scale(C2, scales['ionian/Major'], 1)
+    default_scale = create_scale(C2, SCALES['ionian/Major'], 1)
     
     def __init__(self, master):
         super(AddDialog, self).__init__(master)
@@ -287,7 +287,7 @@ class AddDialog(tk.Toplevel):
         self.listb_players = tk.Listbox(players_frame,
             yscrollcommand=scrollbar.set)
         self.listb_players.pack()
-        #listb_scales.bind('<<ListboxSelect>>', self.on_scale)
+        self.listb_players.bind('<Double-Button-1>', self.ok)
         for p in PLAYERS:
             self.listb_players.insert(tk.END, p.name)
         
@@ -301,14 +301,63 @@ class AddDialog(tk.Toplevel):
     def yview(self, *args):
         self.listb_scales.yview(*args)
     
-    def ok(self):
+    def ok(self, *args):
         index = self.listb_players.curselection()
         P = PLAYERS[index[0]](self.master.midiout)
         P.set_scale(self.default_scale)
         self.master.add_player(P)
         self.destroy()
     
-    def cancel(self):
+    def cancel(self, *args):
+        self.destroy()
+
+
+class MidiConfigDialog(tk.Toplevel):
+    def __init__(self, master):
+        super(MidiConfigDialog, self).__init__(master)
+        self.protocol("WM_DELETE_WINDOW", self.cancel)
+        self.master = master
+        
+        # Description label
+        lbl_name = tk.Label(self, text="Midi output devices:").pack()
+        
+        # Midi output devices listbox
+        self.listbox_frame = tk.Frame(self)
+        self.listbox_frame.pack()
+        scrollbar = tk.Scrollbar(self.listbox_frame, orient=tk.VERTICAL)
+        scrollbar.config(command=self.yview)
+        scrollbar.pack(side="right", fill=tk.Y)
+        self.listb_devices = tk.Listbox(self.listbox_frame,
+            yscrollcommand=scrollbar.set)
+        self.listb_devices.pack()
+        self.listb_devices.bind('<Double-Button-1>', self.ok)
+        for d in mido.get_output_names():
+            self.listb_devices.insert(tk.END, d)
+        
+        # Ok/Cancel buttons
+        buttons_frame = tk.Frame(self)
+        buttons_frame.pack()
+        btn_ok = tk.Button(buttons_frame, text="Ok", command=self.ok)
+        btn_ok.pack(side="left")
+        btn_cancel = tk.Button(buttons_frame, text="Cancel", command=self.cancel)
+        btn_cancel.pack(side="left")
+        
+    def yview(self, *args):
+        self.listb_devices.yview(*args)
+    
+    def cancel(self, *args):
+        self.destroy()
+    
+    def ok(self, *args):
+        dev = self.listb_devices.get(tk.ACTIVE)
+        self.master.midiout.close()
+        self.master.midiout = mido.open_output(dev,
+                                               autoreset=True)
+        assert(self.master.midiout)
+        for playerui in self.master.players:
+            #playerui.player.midi.close()
+            playerui.player.midi = self.master.midiout
+        print("Midi device changed to {}".format(dev))
         self.destroy()
 
 
@@ -336,10 +385,10 @@ class MainWindow(tk.Frame):
     def init_players(self):
         s = Soloist(self.midiout, channel=2)
         s.set_volume(0.5)
-        s.set_scale(create_scale(C2, scales['gypsy'], 3))
+        s.set_scale(create_scale(C2, SCALES['gypsy'], 3))
         s2 = Pad(self.midiout, channel=1)
         s2.set_volume(0.5)
-        s2.set_scale(create_scale(C1, scales['aeolian/minor'], 2))
+        s2.set_scale(create_scale(C1, SCALES['aeolian/minor'], 2))
         self.add_player(s)
         self.add_player(s2)
     
@@ -347,18 +396,20 @@ class MainWindow(tk.Frame):
         p = PlayerUI(self.frame_players, player)
         p.pack()
         self.players.append(p)
-        print("Player added...")
     
-    def init_window(self):
-        print("init window")
+    def init_window(self):        
         # Menu
         menu = tk.Menu(self)
         self.master.config(menu=menu)
         file = tk.Menu(menu)
         file.add_command(label="Exit", command=self.client_exit)
         menu.add_cascade(label="File", menu=file)
+        config = tk.Menu(menu)
+        config.add_command(label="Midi", command=self.open_midi_config_dialog)
+        menu.add_cascade(label="Config", menu=config)
         about = tk.Menu(menu)
         menu.add_cascade(label="About", menu=about)
+        
         
         self.toolbar = tk.Frame(self)
         self.toolbar.pack()
@@ -366,7 +417,7 @@ class MainWindow(tk.Frame):
         self.spinb_tempo["textvariable"] = self.tempo
         self.spinb_tempo.pack(side="left")
         btn_add = tk.Button(self.toolbar, text="+",
-            command=self.add_player_dialog)
+            command=self.open_add_player_dialog)
         btn_add.pack(side="left")
         
         self.frame_players = tk.Frame(self)
@@ -378,8 +429,11 @@ class MainWindow(tk.Frame):
         dt /= TICKS_PER_BEAT
         self.time_step = int(dt)
     
-    def add_player_dialog(self):
+    def open_add_player_dialog(self):
         self.wait_window(AddDialog(self))
+    
+    def open_midi_config_dialog(self):
+        self.wait_window(MidiConfigDialog(self))
     
     def client_exit(self):
         print("Goodbye !")
