@@ -110,21 +110,31 @@ class PlayerUI(tk.Frame):
         self.dialog_midi = None
         self.dialog_key = None
         self.dialog_weights = None
-        btn_activate = tk.Checkbutton(self, variable=self.active,
-            command=self.activate)
-        btn_activate.pack(side="left")
         
+        # Name label
+        lbl_name = tk.Label(self,
+                            text=self.player.name.upper().ljust(10, '_')[:10])
+        lbl_name.pack(side="left")
+        
+        # Midi button
         btn_midi = tk.Button(self, text="MIDI",
             command=self.open_midi_dialog)
         btn_midi.pack(side="left")
         
+        # Key button
         btn_key = tk.Button(self, text="Key",
             command=self.open_key_dialog)
         btn_key.pack(side="left")
         
+        # Weights button
         btn_weights = tk.Button(self, text="Probability weights",
             command=self.open_weights_dialog)
         btn_weights.pack(side="left")
+    
+        # Activate checkbox
+        btn_activate = tk.Checkbutton(self, variable=self.active,
+            command=self.activate)
+        btn_activate.pack(side="left")
     
     def activate(self):
         self.player.active = self.active.get()
@@ -158,10 +168,13 @@ class MidiDialog(tk.Toplevel):
         self.master = master
         self.player = player
         
+        # Name label
+        lbl_name = tk.Label(self, text=self.player.name.upper())
+        lbl_name.pack()
+        
         # Midi channel
         self.channel = tk.IntVar()
         self.channel.set(self.player.channel)
-        self.channel.trace("w", self.on_channel)
         spinb_channel = tk.Spinbox(self, from_=1, to=16)
         spinb_channel["textvariable"] = self.channel
         tk.Label(self, text="Midi channel:").pack()
@@ -170,7 +183,6 @@ class MidiDialog(tk.Toplevel):
         # Midi program
         self.program = tk.IntVar()
         self.program.set(self.player.program)
-        self.program.trace("w", self.on_program)
         spinb_program = tk.Spinbox(self, from_=0, to=127)
         spinb_program["textvariable"] = self.program
         tk.Label(self, text="Midi program:").pack()
@@ -179,19 +191,18 @@ class MidiDialog(tk.Toplevel):
         # Midi volume
         self.volume = tk.IntVar()
         self.volume.set(self.player.volume*100)
-        self.volume.trace("w", self.on_volume)
         scale_volume = tk.Scale(self, from_=0, to=100, orient=tk.HORIZONTAL)
         scale_volume["variable"] = self.volume
         tk.Label(self, text="Volume:").pack()
         scale_volume.pack()
-    
-    def on_channel(self, *args):
+        
+        # OK Button
+        btn_ok = tk.Button(self, text="OK", command=self.on_ok)
+        btn_ok.pack()
+        
+    def on_ok(self):
         self.player.channel = self.channel.get()
-    
-    def on_program(self, *args):
         self.player.program_change(self.program.get())
-    
-    def on_volume(self, *args):
         self.player.set_volume(self.volume.get()/100)
     
     def close_window(self):
@@ -206,6 +217,10 @@ class KeyDialog(tk.Toplevel):
         self.master = master
         self.player = player
         
+        # Name label
+        lbl_name = tk.Label(self, text=self.player.name.upper())
+        lbl_name.pack()
+        
         tk.Label(self, text="Scale:").pack()
         self.scale_frame = tk.Frame(self)
         self.scale_frame.pack()
@@ -215,13 +230,12 @@ class KeyDialog(tk.Toplevel):
         self.listb_scales = tk.Listbox(self.scale_frame,
             yscrollcommand=scrollbar.set)
         self.listb_scales.pack()
-        self.listb_scales.bind('<<ListboxSelect>>', self.on_scale)
+        self.listb_scales.bind('<Double-Button-1>', self.on_ok)
         for s in sorted(scales.keys()):
             self.listb_scales.insert(tk.END, s)
         
         self.rootnote = tk.IntVar()
         self.rootnote.set(self.player.scale[0])
-        self.rootnote.trace("w", self.on_scale)
         self.spinb_rootnote = tk.Spinbox(self, from_=0, to=127)
         self.spinb_rootnote["textvariable"] = self.rootnote
         tk.Label(self, text="Root note:").pack()
@@ -229,19 +243,22 @@ class KeyDialog(tk.Toplevel):
         
         self.octavespan = tk.IntVar()
         self.octavespan.set(1)
-        self.octavespan.trace("w", self.on_scale)
         self.spinb_octavespan = tk.Spinbox(self, from_=1, to=5)
         self.spinb_octavespan["textvariable"] = self.octavespan
         tk.Label(self, text="Span (octaves):").pack()
         self.spinb_octavespan.pack()
+        
+        # OK Button
+        btn_ok = tk.Button(self, text="OK", command=self.on_ok)
+        btn_ok.pack()
     
     def yview(self, *args):
         self.listb_scales.yview(*args)
     
-    def on_scale(self, *args):
+    def on_ok(self, *args):
         index = self.listb_scales.curselection()
-        scale_name = self.listb_scales.get(index)
-        print("Changed scale to {}".format(scale_name))
+        scale_name = self.listb_scales.get(tk.ACTIVE)
+        print("Changed {} scale to {}".format(self.player.name, scale_name))
         self.player.set_scale(create_scale(self.rootnote.get(),
             scales[scale_name], self.octavespan.get()))
     

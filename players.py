@@ -197,7 +197,10 @@ class Soloist(StochaPlayer):
     def f3(self, r):
         """Play next note on scale (2 steps)"""
         self.index = (self.index + 2*self.direction) % len(self.scale)
-        self.play_notes([self.scale[self.index]])
+        try:
+            self.play_notes([self.scale[self.index]])
+        except ValueError:
+            print(self.index, len(self.scale))
     
     def f4(self, r):
         """Change direction (up/down)"""
