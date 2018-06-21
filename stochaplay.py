@@ -6,8 +6,8 @@ from __future__ import division, print_function
 import sys
 import random
 import time
-import heapq
 import mido
+from collections import deque
 from players import *
 
 # Backward compatibility with python 2.7
@@ -23,6 +23,7 @@ C2 = 48
 C3 = 60
 
 PLAYERS = [Basic, Chaotic, Soloist, Pad, Monotone]
+
 
 # Diatonic scales
 SCALES = {
@@ -78,27 +79,6 @@ def create_scale(tonic, pattern, octave=1):
 ################################################################################
 ################################################################################
 
-"""
-class DevicePickerGui:
-    def __init__(self, top):
-        self.top = top
-        self.top.title("Midi output ports")
-        frame = tk.Frame(top)
-        frame.pack()
-        
-        self.buttons = []
-        
-        for d in mido.get_output_names():
-            self.buttons.append(tk.Button(frame, text=d,
-                command=lambda dev=d: self.openPort(dev)))
-            self.buttons[-1].pack()
-        
-    def openPort(self, device):
-        global midiout
-        midiout = mido.open_output(device, autoreset=True)
-        top.destroy()
-"""
-
 
 class PlayerUI(tk.Frame):
     def __init__(self, master, player):
@@ -113,27 +93,29 @@ class PlayerUI(tk.Frame):
         
         # Name label
         lbl_name = tk.Label(self,
-                            text=self.player.name.upper().ljust(10, '_')[:10])
+                            text=self.player.name.upper().ljust(14, '_')[:14],
+                            bg=self.player.color,
+                            width=16)
         lbl_name.pack(side="left")
         
         # Midi button
         btn_midi = tk.Button(self, text="MIDI",
-            command=self.open_midi_dialog)
+                             command=self.open_midi_dialog)
         btn_midi.pack(side="left")
         
         # Key button
         btn_key = tk.Button(self, text="Key",
-            command=self.open_key_dialog)
+                            command=self.open_key_dialog)
         btn_key.pack(side="left")
         
         # Weights button
         btn_weights = tk.Button(self, text="Probability weights",
-            command=self.open_weights_dialog)
+                                command=self.open_weights_dialog)
         btn_weights.pack(side="left")
     
         # Activate checkbox
         btn_activate = tk.Checkbutton(self, variable=self.active,
-            command=self.activate)
+                                      command=self.activate)
         btn_activate.pack(side="left")
     
     def activate(self):
@@ -153,7 +135,7 @@ class PlayerUI(tk.Frame):
     
     def open_weights_dialog(self):
         if self.dialog_weights == None:
-            pass
+            self.dialog_weights = WeightsDialog(self, self.player)
         else:
             self.dialog_weights.close_window()
     
@@ -169,8 +151,9 @@ class MidiDialog(tk.Toplevel):
         self.player = player
         
         # Name label
-        lbl_name = tk.Label(self, text=self.player.name.upper())
-        lbl_name.pack()
+        lbl_name = tk.Label(self,
+                            bg=self.player.color, text=self.player.name.upper())
+        lbl_name.pack(fill=tk.X)
         
         # Midi channel
         self.channel = tk.IntVar()
@@ -218,9 +201,11 @@ class KeyDialog(tk.Toplevel):
         self.player = player
         
         # Name label
-        lbl_name = tk.Label(self, text=self.player.name.upper())
-        lbl_name.pack()
+        lbl_name = tk.Label(self,
+                            bg=self.player.color, text=self.player.name.upper())
+        lbl_name.pack(fill=tk.X)
         
+        # Scales
         tk.Label(self, text="Scale:").pack()
         self.scale_frame = tk.Frame(self)
         self.scale_frame.pack()
@@ -234,6 +219,7 @@ class KeyDialog(tk.Toplevel):
         for s in sorted(SCALES.keys()):
             self.listb_scales.insert(tk.END, s)
         
+        # Root note
         self.rootnote = tk.IntVar()
         self.rootnote.set(self.player.scale[0])
         self.spinb_rootnote = tk.Spinbox(self, from_=0, to=127)
@@ -241,6 +227,7 @@ class KeyDialog(tk.Toplevel):
         tk.Label(self, text="Root note:").pack()
         self.spinb_rootnote.pack()
         
+        # Octave span
         self.octavespan = tk.IntVar()
         self.octavespan.set(1)
         self.spinb_octavespan = tk.Spinbox(self, from_=1, to=5)
@@ -264,6 +251,61 @@ class KeyDialog(tk.Toplevel):
     
     def close_window(self):
         self.master.dialog_key = None
+        self.destroy()
+
+
+class WeightsDialog(tk.Toplevel):
+    def __init__(self, master, player):
+        super(WeightsDialog, self).__init__(master)
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
+        self.master = master
+        self.player = player
+        self.values = []
+        
+        # Name Label
+        lbl_name = tk.Label(self,
+                            bg=self.player.color,
+                            text=self.player.name.upper())
+        lbl_name.pack(fill=tk.X)
+        
+        # Weight Spinboxes
+        for i, table in enumerate(self.player.weights):
+            table_frame = tk.Frame(self)
+            table_frame.pack(fill=tk.X)
+            lbl_desc = tk.Label(table_frame,
+                text=self.player.weights_desc[i].ljust(22, '_')[:22],
+                width=20)
+            lbl_desc.pack(side="left")
+            table_val = []
+            for val in table:
+                table_val.append(tk.IntVar())
+                table_val[-1].set(val)
+                spinb_val = tk.Spinbox(table_frame, width=3, from_=0, to=50)
+                spinb_val["textvariable"] = table_val[-1]
+                spinb_val.pack(side="left")
+                table_val[-1].trace("w", self.update_weights)
+            self.values.append(table_val)
+        
+        # Bottom Buttons
+        frame_buttons = tk.Frame(self)
+        frame_buttons.pack()
+        btn_randomize = tk.Button(frame_buttons,
+                                  text="Randomize", command=self.randomize)
+        btn_randomize.pack()
+    
+    def randomize(self):
+        for table in self.values:
+            for val in table:
+                val.set(random.randint(0, 10))
+                ### UGLY, it calls update_weights for every set variable
+    
+    def update_weights(self, *args):
+        intvalues = [list(map(lambda x: x.get(), table)) for table in self.values]
+        self.player.update_weights(intvalues)
+        print("Weights updated for {}".format(self.player.name))
+    
+    def close_window(self):
+        self.master.dialog_weights = None
         self.destroy()
 
 
@@ -316,10 +358,11 @@ class MidiConfigDialog(tk.Toplevel):
     def __init__(self, master):
         super(MidiConfigDialog, self).__init__(master)
         self.protocol("WM_DELETE_WINDOW", self.cancel)
+        self.grab_set()
         self.master = master
         
         # Description label
-        lbl_name = tk.Label(self, text="Midi output devices:").pack()
+        lbl_name = tk.Label(self, text="Midi output devices:").pack(fill=tk.X)
         
         # Midi output devices listbox
         self.listbox_frame = tk.Frame(self)
@@ -369,7 +412,7 @@ class MainWindow(tk.Frame):
         self.master.title("StochaPlay")
         #self.master.geometry("400x400")
         
-        self.midiout = mido.open_output('amsynth:MIDI IN 128:0', autoreset=True)
+        self.midiout = mido.open_output(autoreset=True)
         assert(self.midiout)
         self.tempo = tk.IntVar()
         self.tempo.trace("w", self.update_time_step)
@@ -410,16 +453,18 @@ class MainWindow(tk.Frame):
         about = tk.Menu(menu)
         menu.add_cascade(label="About", menu=about)
         
-        
-        self.toolbar = tk.Frame(self)
-        self.toolbar.pack()
-        self.spinb_tempo = tk.Spinbox(self.toolbar, from_=1, to=240)
-        self.spinb_tempo["textvariable"] = self.tempo
-        self.spinb_tempo.pack(side="left")
-        btn_add = tk.Button(self.toolbar, text="+",
+        # Toolbar Frame
+        toolbar = tk.Frame(self)
+        toolbar.pack(fill=tk.X)
+        lbl_tempo = tk.Label(toolbar, text="Tempo (BPM):").pack(side="left")
+        spinb_tempo = tk.Spinbox(toolbar, width=5, from_=1, to=240)
+        spinb_tempo["textvariable"] = self.tempo
+        spinb_tempo.pack(side="left")
+        btn_add = tk.Button(toolbar, text="+",
             command=self.open_add_player_dialog)
-        btn_add.pack(side="left")
+        btn_add.pack(side="right")
         
+        # Players Frame
         self.frame_players = tk.Frame(self)
         self.frame_players.pack()
     
@@ -444,6 +489,7 @@ class MainWindow(tk.Frame):
     def tick(self):
         r1 = random.random()
         r2 = random.random()
+        
         for p in self.players:
             p.tick(r1, r2)
         if __debug__:

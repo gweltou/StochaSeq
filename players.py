@@ -28,7 +28,7 @@ class StochaPlayer(object):
         self.scale = scale
         if self.scale:
             self.set_scale(self.scale)
-        self.weigths_desc = ["function", "note/chord duration", "silence duration"]
+        self.weights_desc = ["function", "note/chord duration", "silence duration"]
         self.update_weights([[5, 2, 2, 1],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
@@ -37,6 +37,7 @@ class StochaPlayer(object):
         self.scale = sorted(scale)
     
     def update_weights(self, weights):
+        assert(len(weights) > 0)
         self.weights = weights
         self._fweights = []
         for table in self.weights:
@@ -70,6 +71,9 @@ class StochaPlayer(object):
     
     def set_volume(self, vol):
         self.volume = vol
+    
+    def stop_all_notes(self):
+        pass
     
     def play_notes(self, notes, dur=None):
         """ Play notes with a given (or random if dur=None) duration
@@ -121,6 +125,7 @@ class StochaPlayer(object):
 
 class Chaotic(StochaPlayer):
     name = "Chaotic"
+    color = "#aa5555"
     
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Chaotic, self).__init__(midiout, channel, timesig)
@@ -146,6 +151,7 @@ class Chaotic(StochaPlayer):
 
 class Basic(StochaPlayer):
     name = "Basic"
+    color = "#00ff00"
     
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Basic, self).__init__(midiout, channel, timesig)
@@ -160,9 +166,11 @@ class Basic(StochaPlayer):
     
     def f2(self, r):
         """Play two harmonious notes """
-        note = self.scale[int(r*len(self.scale))]
-        interval = random.choice([4, 5, 7, 12]) ### TODO: this is bad
-        self.play_notes([note, note+interval])
+        index = int(r*len(self.scale))
+        note = self.scale[index]
+        index2 = (index+random.randrange(1, len(self.scale))) % len(self.scale)
+        note2 = self.scale[index2]
+        self.play_notes([note, note2])
     
     def f3(self, r):
         """Play a triad"""
@@ -175,6 +183,7 @@ class Basic(StochaPlayer):
 
 class Soloist(StochaPlayer):
     name = "Soloist"
+    color = "#ff0000"
     
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Soloist, self).__init__(midiout, channel, timesig)
@@ -210,6 +219,7 @@ class Soloist(StochaPlayer):
 
 class Pad(Basic):
     name = "Pad"
+    color = "#0000ff"
     
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Pad, self).__init__(midiout, channel, timesig)
@@ -221,6 +231,7 @@ class Pad(Basic):
 
 class Monotone(StochaPlayer):
     name = "Monotone"
+    color = "#ff00ff"
     
     def __init__(self, midiout, channel=0, timesig=(4,4)):
         super(Monotone, self).__init__(midiout, channel, timesig)
@@ -269,3 +280,15 @@ class Monotone(StochaPlayer):
         if self.pitch > 127: print(self.pitch, r)
         self.f1(r)
 
+class BasicLooper(Basic):
+    name = "Basic Looper"
+    color = "#aaaa00"
+    
+    def __init__(self, midiout, channel=0, timesig=(4,4)):
+        super(Pad, self).__init__(midiout, channel, timesig)
+        self.durations = list(map(lambda x: x*4, self.durations))
+        self.update_weights([[6, 2, 2, 4],
+            [1, 2, 0, 10, 0, 6, 0, 6, 0, 4],
+            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
+    
+    
