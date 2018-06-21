@@ -28,7 +28,9 @@ class StochaPlayer(object):
         self.scale = scale
         if self.scale:
             self.set_scale(self.scale)
-        self.weights_desc = ["function", "note/chord duration", "silence duration"]
+        self.weights_desc = ["functions",
+                             "silence durations",
+                             "note/chord durations"]
         self.update_weights([[5, 2, 2, 1],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
@@ -73,7 +75,10 @@ class StochaPlayer(object):
         self.volume = vol
     
     def stop_all_notes(self):
-        pass
+        for note in self.played_notes:
+            self.midi.send(mido.Message('note_off',
+                                        channel=self.channel, note=note))
+        self.wait_nticks = 0
     
     def play_notes(self, notes, dur=None):
         """ Play notes with a given (or random if dur=None) duration
@@ -97,27 +102,26 @@ class StochaPlayer(object):
             self.midi.send(mido.Message('note_on', channel=self.channel,
                 note=note, velocity=vol))
         if not dur:
-            i = self.get_weighted_index(random.random(), self._fweights[1])
+            i = self.get_weighted_index(random.random(), self._fweights[2])
             dur = self.durations[i]
         self.wait_nticks = dur - 1  # skip a tick
         self.played_notes = notes
     
-    def tick(self, r1, r2):
+    def tick(self, *rand):
         if self.wait_nticks > 0:
             self.wait_nticks -= 1
             return
-        if self.played_notes:
-            for note in self.played_notes:
-                self.midi.send(mido.Message('note_off', channel=self.channel,
-                    note=note))
+        for note in self.played_notes:
+            self.midi.send(mido.Message('note_off',
+                                        channel=self.channel, note=note))
         
         if self.active:
-            i = self.get_weighted_index(r1, self._fweights[0])
-            eval("self.f{}(r2)".format(i))
+            i = self.get_weighted_index(rand[0], self._fweights[0])
+            eval("self.f{}(*rand[1:])".format(i))
     
-    def f0(self, r):
+    def f0(self, *rand):
         """Silence"""
-        i = self.get_weighted_index(random.random(), self._fweights[2])
+        i = self.get_weighted_index(rand[0], self._fweights[1])
         self.wait_nticks = self.durations[i] - 1
         if __debug__:
             print('-', end=' ')
@@ -133,17 +137,17 @@ class Chaotic(StochaPlayer):
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
     
-    def f1(self, r):
+    def f1(self, *rand):
         """Play a random note"""
         pitch = random.choice(self.scale)
         self.play_notes([pitch])
     
-    def f2(self, r):
+    def f2(self, *rand):
         """Play two different random notes"""
         notes = random.sample(self.scale, 2)
         self.play_notes(notes)
     
-    def f3(self, r):
+    def f3(self, *rand):
         """Play three different random notes"""
         notes = random.sample(self.scale, 3)
         self.play_notes(notes)
@@ -159,26 +163,31 @@ class Basic(StochaPlayer):
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
     
-    def f1(self, r):
+    def f1(self, *rand):
         """Play a random note"""
-        note = self.scale[int(r*len(self.scale))]
-        self.play_notes([note])
+        note = self.scale[int(rand[0]*len(self.scale))]
+        i = self.get_weighted_index(rand[1], self._fweights[2])
+        dur =  self.durations[i]
+        self.play_notes([note], dur)
     
-    def f2(self, r):
-        """Play two harmonious notes """
-        index = int(r*len(self.scale))
+    def f2(self, *rand):
+        """Play two random notes """
+        index = int(rand[0]*len(self.scale))
         note = self.scale[index]
-        index2 = (index+random.randrange(1, len(self.scale))) % len(self.scale)
+        index2 = int(rand[1]*len(self.scale)) % len(self.scale)
         note2 = self.scale[index2]
-        self.play_notes([note, note2])
+        i = self.get_weighted_index(rand[1], self._fweights[2])
+        dur =  self.durations[i]
+        self.play_notes([note, note2], dur)
     
-    def f3(self, r):
+    def f3(self, *rand):
         """Play a triad"""
-        ### TODO: la note de l'accord peut dépasser la valeur 127 !
-        i0 = int(r*len(self.scale))
+        i0 = int(rand[0]*len(self.scale))
         i1 = (i0+2) % len(self.scale)
         i2 = (i0+4) % len(self.scale)
-        self.play_notes([self.scale[i0], self.scale[i1], self.scale[i2]])
+        i = self.get_weighted_index(rand[1], self._fweights[2])
+        dur =  self.durations[i]
+        self.play_notes([self.scale[i0], self.scale[i1], self.scale[i2]], dur)
 
 
 class Soloist(StochaPlayer):
@@ -193,28 +202,31 @@ class Soloist(StochaPlayer):
             [8, 12, 1, 4, 0, 1, 0, 0, 0, 0],
             [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
     
-    def f1(self, r):
+    def f1(self, *rand):
         """Play a new random note"""
-        self.index = int(r*len(self.scale))
-        self.play_notes([self.scale[self.index]])
+        self.index = int(rand[0]*len(self.scale))
+        i = self.get_weighted_index(rand[1], self._fweights[2])
+        dur =  self.durations[i]
+        self.play_notes([self.scale[self.index]], dur)
     
-    def f2(self, r):
+    def f2(self, *rand):
         """Play next note on scale (1 step)"""
         self.index = (self.index + self.direction) % len(self.scale)
-        self.play_notes([self.scale[self.index]])
+        i = self.get_weighted_index(rand[1], self._fweights[2])
+        dur =  self.durations[i]
+        self.play_notes([self.scale[self.index]], dur)
     
-    def f3(self, r):
+    def f3(self, *rand):
         """Play next note on scale (2 steps)"""
         self.index = (self.index + 2*self.direction) % len(self.scale)
-        try:
-            self.play_notes([self.scale[self.index]])
-        except ValueError:
-            print(self.index, len(self.scale))
+        i = self.get_weighted_index(rand[1], self._fweights[2])
+        dur =  self.durations[i]
+        self.play_notes([self.scale[self.index]], dur)
     
-    def f4(self, r):
+    def f4(self, *rand):
         """Change direction (up/down)"""
         self.direction = -self.direction
-        self.f2(r)
+        self.f2(*rand)
 
 
 class Pad(Basic):
@@ -225,8 +237,8 @@ class Pad(Basic):
         super(Pad, self).__init__(midiout, channel, timesig)
         self.durations = list(map(lambda x: x*4, self.durations))
         self.update_weights([[6, 2, 2, 4],
-            [1, 2, 0, 10, 0, 6, 0, 6, 0, 4],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
+            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
+            [1, 2, 0, 10, 0, 6, 0, 6, 0, 4]])
 
 
 class Monotone(StochaPlayer):
@@ -246,7 +258,7 @@ class Monotone(StochaPlayer):
         self.scale = sorted(scale)
         self.pitch = random.choice(self.scale)
     
-    def tick(self, r1, r2):
+    def tick(self, *rand):
         if self.wait_nticks > 0:
             self.wait_nticks -= 1
             return
@@ -258,37 +270,110 @@ class Monotone(StochaPlayer):
         if not self.active:
             return
         if self.halfbeat:
-            self.f2(r2)
+            self.f2(*rand[1:])
         else:
             i = self.get_weighted_index(r1, self._fweights[0])
-            eval("self.f{}(r2)".format(i))
+            eval("self.f{}(*rand[1:])".format(i))
     
-    def f1(self, r):
+    def f1(self, *rand):
         """Play on beat"""
         if self.pitch:
             self.play_notes([self.pitch], TICKS_PER_BEAT)
     
-    def f2(self, r):
+    def f2(self, *rand):
         """Play on half beat"""
         if self.pitch:
             self.play_notes([self.pitch], TICKS_PER_BEAT//2)
             self.halfbeat = not self.halfbeat
    
-    def f3(self, r):
+    def f3(self, *rand):
         """Change pitch"""
-        self.pitch = self.scale[int(r*len(self.scale))]
-        if self.pitch > 127: print(self.pitch, r)
-        self.f1(r)
+        self.pitch = self.scale[int(rand[0]*len(self.scale))]
+        self.f1(*rand)
+
 
 class BasicLooper(Basic):
     name = "Basic Looper"
     color = "#aaaa00"
+    # States
+    SILENCE = 0
+    REPEAT1 = 1
+    REPEAT2 = 2
+    RECORDING = 3
     
     def __init__(self, midiout, channel=0, timesig=(4,4)):
-        super(Pad, self).__init__(midiout, channel, timesig)
-        self.durations = list(map(lambda x: x*4, self.durations))
-        self.update_weights([[6, 2, 2, 4],
-            [1, 2, 0, 10, 0, 6, 0, 6, 0, 4],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
+        super(BasicLooper, self).__init__(midiout, channel, timesig)
+        self.ticks_counter = 0
+        self.ticks_in_measure = TICKS_PER_BEAT * timesig[0]
+        self.patterns = []
+        self.measure_pattern = []
+        self.i_measure = 0
+        self.state = self.RECORDING
+        self.weights_desc = ["basic functions",
+                             "silence durations",
+                             "note/chord durations",
+                             "looping function"]
+        self.update_weights([[1, 3, 2, 1],
+            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
+            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
+            [0, 1, 2, 2]])
     
+    def change_state(self, r):
+        i = self.get_weighted_index(r, self._fweights[3])
+        self.state = i
+        self.ticks_counter = 0
+        self.i_measure = 0
+        self.stop_all_notes()
     
+    def tick(self, *rand):
+        #self.ticks_counter += 1
+        if self.ticks_counter >= self.ticks_in_measure:
+            if self.state == self.REPEAT2 and self.i_measure == 0:
+                self.ticks_counter = 0
+                self.i_measure += 1
+                self.stop_all_notes()
+            elif self.state == self.RECORDING:
+                # add pattern to memory
+                if len(self.patterns) < 2:
+                    self.patterns.append(self.measure_pattern)
+                else:
+                    self.patterns[0] = self.patterns[1]
+                    self.patterns[1] = self.measure_pattern[:]
+                self.measure_pattern = []
+                self.change_state(rand[2])
+            else:
+                self.change_state(rand[2])
+        
+        if self.state == self.SILENCE:
+            pass
+        
+        elif self.state == self.REPEAT1:
+            if len(self.patterns) >= 1:
+                super(BasicLooper, self).tick(*(self.patterns[-1][self.ticks_counter]))
+            else:
+                pass
+                self.state = self.RECORDING
+        
+        elif self.state == self.REPEAT2:
+            if len(self.patterns) >= 2:
+                assert(self.ticks_counter<self.ticks_in_measure)
+                assert(self.i_measure<len(self.patterns))
+                try:
+                    super(BasicLooper, self).tick(*(self.patterns[self.i_measure][self.ticks_counter]))
+                except IndexError:
+                    print(self.ticks_counter)
+                    print(self.ticks_in_measure)
+                    print(self.i_measure)
+                    for p in self.patterns:
+                        print(len(p), p)
+            else:
+                pass
+                self.state = self.RECORDING
+        
+        elif self.state == self.RECORDING:
+            self.measure_pattern.append(rand)
+            super(BasicLooper, self).tick(*rand)
+        
+        self.ticks_counter += 1
+        
+            

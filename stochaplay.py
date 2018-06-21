@@ -22,7 +22,7 @@ C1 = 36
 C2 = 48
 C3 = 60
 
-PLAYERS = [Basic, Chaotic, Soloist, Pad, Monotone]
+PLAYERS = [Basic, Chaotic, Soloist, Pad, Monotone, BasicLooper]
 
 
 # Diatonic scales
@@ -489,9 +489,10 @@ class MainWindow(tk.Frame):
     def tick(self):
         r1 = random.random()
         r2 = random.random()
+        r3 = random.random()
         
         for p in self.players:
-            p.tick(r1, r2)
+            p.tick(r1, r2, r3)
         if __debug__:
             print('.')
         self.master.after(self.time_step, self.tick)
