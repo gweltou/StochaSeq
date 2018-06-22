@@ -200,7 +200,7 @@ class Soloist(StochaPlayer):
         self.index = 0
         self.update_weights([[2, 1, 4, 4, 2],
             [8, 12, 1, 4, 0, 1, 0, 0, 0, 0],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0]])
+            [8, 2, 0, 4, 0, 2, 0, 1, 0, 0]])
     
     def f1(self, *rand):
         """Play a new random note"""
@@ -314,9 +314,9 @@ class BasicLooper(Basic):
                              "note/chord durations",
                              "looping function"]
         self.update_weights([[1, 3, 2, 1],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
-            [1, 2, 0, 10, 0, 3, 0, 1, 0, 0],
-            [0, 1, 2, 2]])
+            [1, 2, 0, 10, 0, 2, 0, 1, 0, 0],
+            [1, 2, 0, 10, 0, 2, 0, 1, 0, 0],
+            [0, 1, 1, 3]])
     
     def change_state(self, r):
         i = self.get_weighted_index(r, self._fweights[3])
@@ -348,6 +348,7 @@ class BasicLooper(Basic):
             pass
         
         elif self.state == self.REPEAT1:
+            assert(self.ticks_counter < len(self.patterns[-1]))
             if len(self.patterns) >= 1:
                 super(BasicLooper, self).tick(*(self.patterns[-1][self.ticks_counter]))
             else:

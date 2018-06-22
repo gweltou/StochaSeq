@@ -207,13 +207,12 @@ class KeyDialog(tk.Toplevel):
         
         # Scales
         tk.Label(self, text="Scale:").pack()
-        self.scale_frame = tk.Frame(self)
-        self.scale_frame.pack()
-        scrollbar = tk.Scrollbar(self.scale_frame, orient=tk.VERTICAL)
+        scale_frame = tk.Frame(self)
+        scale_frame.pack()
+        scrollbar = tk.Scrollbar(scale_frame, orient=tk.VERTICAL)
         scrollbar.config(command=self.yview)
         scrollbar.pack(side="right", fill=tk.Y)
-        self.listb_scales = tk.Listbox(self.scale_frame,
-            yscrollcommand=scrollbar.set)
+        self.listb_scales = tk.Listbox(scale_frame, yscrollcommand=scrollbar.set)
         self.listb_scales.pack()
         self.listb_scales.bind('<Double-Button-1>', self.ok)
         for s in sorted(SCALES.keys()):
@@ -235,6 +234,15 @@ class KeyDialog(tk.Toplevel):
         tk.Label(self, text="Span (octaves):").pack()
         self.spinb_octavespan.pack()
         
+        # Apply all Checkbox
+        frame_checkbtn = tk.Frame(self)
+        frame_checkbtn.pack()
+        tk.Label(frame_checkbtn, text="Apply to all players:").pack(side="left")
+        self.var_apply_all = tk.IntVar()
+        self.var_apply_all.set(0)
+        btn_apply_all = tk.Checkbutton(frame_checkbtn, variable=self.var_apply_all)
+        btn_apply_all.pack(side="left")
+        
         # OK Button
         btn_ok = tk.Button(self, text="OK", command=self.ok)
         btn_ok.pack()
@@ -243,11 +251,17 @@ class KeyDialog(tk.Toplevel):
         self.listb_scales.yview(*args)
     
     def ok(self, *args):
-        index = self.listb_scales.curselection()
         scale_name = self.listb_scales.get(tk.ACTIVE)
-        print("Changed {} scale to {}".format(self.player.name, scale_name))
-        self.player.set_scale(create_scale(self.rootnote.get(),
-            SCALES[scale_name], self.octavespan.get()))
+        new_scale = create_scale(self.rootnote.get(),
+                                 SCALES[scale_name], self.octavespan.get())
+        if self.var_apply_all.get() == 1:
+            root = self.master.master.master
+            for pui in root.players:
+                pui.player.set_scale(new_scale)
+                print("Changed {} scale to {}".format(pui.player.name, scale_name))
+        else:
+            self.player.set_scale(new_scale)
+            print("Changed {} scale to {}".format(self.player.name, scale_name))
     
     def close_window(self):
         self.master.dialog_key = None
@@ -291,13 +305,49 @@ class WeightsDialog(tk.Toplevel):
         frame_buttons.pack()
         btn_randomize = tk.Button(frame_buttons,
                                   text="Randomize", command=self.randomize)
-        btn_randomize.pack()
+        btn_randomize.pack(side="left")
+        btn_mutate = tk.Button(frame_buttons,
+                               text="Mutate", command=self.mutate)
+        btn_mutate.pack(side="left")
     
     def randomize(self):
         for table in self.values:
             for val in table:
                 val.set(random.randint(0, 10))
                 ### UGLY, it calls update_weights for every set variable
+    
+    def mutate(self):
+        def clamp(x):
+            return min(max(x, 0), 100)
+        
+        table = random.choice(self.values)
+        
+        r = random.randint(0, 3)
+        print(r)
+        # Rotation of a table
+        if r == 0:
+            ## left rotation
+            left = table[0].get()
+            for i, var in enumerate(table[:-1]):
+                var.set(clamp(table[i+1].get()))
+            table[-1].set(left)
+        if r == 1:
+            ## right rotation
+            right = table[-1].get()
+            for i in range(len(table)-1, 0, -1):
+                table[i].set(clamp(table[i-1].get()))
+            table[0].set(right)
+        
+        # Substraction by 1
+        if r == 2:
+            for var in table:
+                var.set(clamp(var.get()-1))
+        
+        # Raise to power 2
+        if r == 3:
+            for var in table:
+                var.set(clamp(var.get()**2))
+        
     
     def update_weights(self, *args):
         intvalues = [list(map(lambda x: x.get(), table)) for table in self.values]
