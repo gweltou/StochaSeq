@@ -250,7 +250,7 @@ class Monotone(StochaPlayer):
         self.pitch = None
         self.durations = list(map(lambda x: x*4, self.durations))
         self.update_weights([[1, 10, 2, 1],
-            [],
+            [8, 12, 1, 4, 0, 1, 0, 0, 0, 0],
             [1, 2, 0, 10, 0, 4, 0, 1, 0, 1]])
         self.halfbeat = False
     
